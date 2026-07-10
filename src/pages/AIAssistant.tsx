@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import { GoogleGenAI } from "@google/genai";
-import { Send, Bot, User, Sparkles, Loader2, Music, Mic2, TrendingUp } from "lucide-react";
+import { Send, Bot, User, Sparkles, Loader2, Music, Mic2, TrendingUp, Megaphone } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import ReactMarkdown from "react-markdown";
+import { useAuth } from "../contexts/AuthContext";
 
 interface Message {
   id: string;
@@ -10,7 +11,18 @@ interface Message {
   text: string;
 }
 
+interface Song {
+  id: number;
+  title: string;
+  genre: string;
+  release_date: string;
+  streams: number;
+  revenue: number;
+  cover: string | null;
+}
+
 export default function AIAssistant() {
+  const { currentUser } = useAuth();
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
@@ -20,6 +32,8 @@ export default function AIAssistant() {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [selectedSongId, setSelectedSongId] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -30,17 +44,28 @@ export default function AIAssistant() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSend = async () => {
-    if (!input.trim()) return;
+  useEffect(() => {
+    if (currentUser) {
+      fetch(`/api/royalties/${currentUser.uid}`)
+        .then(res => res.json())
+        .then(data => {
+          setSongs(data);
+        })
+        .catch(err => console.error("Error fetching songs:", err));
+    }
+  }, [currentUser]);
+
+  const handleSend = async (textToSend: string = input) => {
+    if (!textToSend.trim()) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       type: "user",
-      text: input.trim(),
+      text: textToSend.trim(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setInput("");
+    if (textToSend === input) setInput("");
     setIsLoading(true);
 
     try {
@@ -48,7 +73,7 @@ export default function AIAssistant() {
       
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: input,
+        contents: textToSend,
         config: {
           systemInstruction: "Você é um assistente especializado em indústria musical, distribuição digital, marketing para artistas e produção musical. Você trabalha para a SLYDE MUSIK, uma plataforma de distribuição de música. Responda em português de forma amigável, profissional e concisa. Use formatação markdown para destacar pontos importantes.",
         }
@@ -74,10 +99,27 @@ export default function AIAssistant() {
     }
   };
 
+  const handleMarketingSuggestion = () => {
+    if (!selectedSongId) return;
+    const song = songs.find(s => s.id.toString() === selectedSongId);
+    if (!song) return;
+
+    const prompt = `Gere ideias de marketing e promoções para o meu lançamento musical.
+Título: ${song.title}
+Gênero: ${song.genre || 'Não especificado'}
+Streams atuais: ${song.streams.toLocaleString('pt-BR')}
+Receita gerada: $${song.revenue.toFixed(2)}
+
+Por favor, sugira 3 estratégias práticas e criativas para aumentar o alcance dessa música, considerando seu gênero e desempenho atual.`;
+
+    handleSend(prompt);
+    setSelectedSongId("");
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      handleSend(input);
     }
   };
 
@@ -164,6 +206,37 @@ export default function AIAssistant() {
           </div>
         )}
 
+        {/* Marketing Suggestion Tool */}
+        {songs.length > 0 && (
+          <div className="px-6 pb-4">
+            <div className="bg-[#7a5cff]/10 border border-[#7a5cff]/20 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-4">
+              <div className="flex items-center gap-3 text-[#7a5cff] shrink-0">
+                <Megaphone size={24} />
+                <span className="font-medium text-sm">Ideias de Marketing:</span>
+              </div>
+              <select
+                value={selectedSongId}
+                onChange={(e) => setSelectedSongId(e.target.value)}
+                className="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#7a5cff] appearance-none"
+              >
+                <option value="" disabled>Selecione um lançamento...</option>
+                {songs.map(song => (
+                  <option key={song.id} value={song.id}>
+                    {song.title} {song.genre ? `(${song.genre})` : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleMarketingSuggestion}
+                disabled={!selectedSongId || isLoading}
+                className="w-full sm:w-auto px-4 py-2 bg-[#7a5cff] hover:bg-[#6246ea] disabled:bg-white/10 disabled:text-gray-500 text-white text-sm font-medium rounded-lg transition-colors shrink-0"
+              >
+                Gerar Estratégia
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Input Area */}
         <div className="p-4 bg-black/20 border-t border-white/5">
           <div className="flex gap-3 items-end">
@@ -178,7 +251,7 @@ export default function AIAssistant() {
               />
             </div>
             <button
-              onClick={handleSend}
+              onClick={() => handleSend(input)}
               disabled={!input.trim() || isLoading}
               className="w-[52px] h-[52px] bg-[#7a5cff] hover:bg-[#6246ea] disabled:bg-white/10 disabled:text-gray-500 text-white rounded-xl flex items-center justify-center transition-colors shrink-0"
             >

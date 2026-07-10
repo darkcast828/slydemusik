@@ -9,7 +9,6 @@ import {
 
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
-  const [showVideo, setShowVideo] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -20,33 +19,6 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen bg-[#050505] text-white selection:bg-[#1ED760] selection:text-black font-sans overflow-x-hidden">
       
-      {/* Video Modal */}
-      {showVideo && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 bg-black/90 backdrop-blur-sm">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="relative w-full max-w-5xl aspect-video bg-[#0D0D0D] rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
-          >
-            <button 
-              onClick={() => setShowVideo(false)}
-              className="absolute top-4 right-4 z-10 w-10 h-10 bg-black/50 hover:bg-black/80 text-white rounded-full flex items-center justify-center transition-colors backdrop-blur-md"
-            >
-              <X size={20} />
-            </button>
-            <iframe 
-              className="w-full h-full"
-              src="https://www.youtube.com/embed/LXb3EKWsInQ?autoplay=1" 
-              title="Demonstração Slyde" 
-              frameBorder="0" 
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-              allowFullScreen
-            ></iframe>
-          </motion.div>
-        </div>
-      )}
-
       {/* Navbar */}
       <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? 'bg-[#050505]/80 backdrop-blur-xl border-b border-white/[0.08] shadow-2xl py-4' : 'bg-transparent py-6'}`}>
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between">
@@ -113,13 +85,6 @@ export default function LandingPage() {
                 Distribuir Agora
                 <ArrowRight size={20} />
               </a>
-              <button 
-                onClick={() => setShowVideo(true)}
-                className="inline-flex items-center gap-2 bg-white/[0.05] text-white border border-white/[0.08] px-8 py-4 rounded-full text-lg font-bold hover:bg-white/[0.1] transition-all hover:scale-105 active:scale-95"
-              >
-                <PlayCircle size={20} />
-                Ver Demonstração
-              </button>
             </motion.div>
           </div>
 

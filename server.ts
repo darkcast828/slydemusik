@@ -5,11 +5,12 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 
-import authRoutes from "./routes/auth.js";
-import musicRoutes from "./routes/music.js";
-import royaltiesRoutes from "./routes/royalties.js";
-import adminRoutes from "./routes/admin.js";
-import distributionRoutes from "./routes/distribution.js";
+import authRoutes from "./routes/auth";
+import musicRoutes from "./routes/music";
+import royaltiesRoutes from "./routes/royalties";
+import adminRoutes from "./routes/admin";
+import distributionRoutes from "./routes/distribution";
+import mpesaRoutes from "./routes/mpesa";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -26,6 +27,8 @@ app.use("/api/music", musicRoutes);
 app.use("/api/royalties", royaltiesRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/distribution", distributionRoutes);
+
+app.use("/api/mpesa", mpesaRoutes);
 
 // Serve uploaded files statically
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));

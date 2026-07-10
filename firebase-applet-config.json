@@ -3,8 +3,8 @@
   "appId": "1:82697142163:web:5d24106d9eaf92df8cf266",
   "apiKey": "AIzaSyBKUzKHMML44zJB1mKUf2sP8v2L3iOnZNE",
   "authDomain": "gen-lang-client-0033030816.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-3fc56f6e-d853-4473-afec-1e12c0d53301",
   "storageBucket": "gen-lang-client-0033030816.firebasestorage.app",
   "messagingSenderId": "82697142163",
-  "measurementId": ""
+  "measurementId": "",
+  "oAuthClientId": "82697142163-55caqfi6vrgin00pn87eh7nqc2rivueo.apps.googleusercontent.com"
 }

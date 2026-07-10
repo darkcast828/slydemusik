@@ -18,6 +18,7 @@ export default function Upload() {
   const [file, setFile] = useState<File | null>(null);
   const [cover, setCover] = useState<File | null>(null);
   const [message, setMessage] = useState("");
+  const [isConfirmed, setIsConfirmed] = useState(false);
   
   // Distribution Flow States
   const [isUploading, setIsUploading] = useState(false);
@@ -30,14 +31,91 @@ export default function Upload() {
   // File Processing States
   const [isProcessingCover, setIsProcessingCover] = useState(false);
   const [coverProgress, setCoverProgress] = useState(0);
+  const [isDraggingCover, setIsDraggingCover] = useState(false);
+  
   const [isProcessingMusic, setIsProcessingMusic] = useState(false);
   const [musicProgress, setMusicProgress] = useState(0);
+  const [isDraggingMusic, setIsDraggingMusic] = useState(false);
+
+  const validateCover = (file: File) => {
+    const validTypes = ['image/jpeg', 'image/png'];
+    if (!validTypes.includes(file.type)) {
+      setMessage("Erro: A capa deve ser no formato JPG ou PNG.");
+      return false;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setMessage("Erro: A capa não pode ter mais de 10MB.");
+      return false;
+    }
+    return true;
+  };
+
+  const processCoverFile = (selectedFile: File) => {
+    setIsProcessingCover(true);
+    setCoverProgress(0);
+    setMessage("");
+    const interval = setInterval(() => {
+      setCoverProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setCover(selectedFile);
+          setIsProcessingCover(false);
+          return 100;
+        }
+        return prev + 15;
+      });
+    }, 50);
+  };
+
+  const validateMusic = (file: File) => {
+    const validTypes = ['audio/wav', 'audio/mpeg', 'audio/mp3', 'audio/x-wav'];
+    const validExtensions = ['.wav', '.mp3'];
+    const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+    
+    if (!validTypes.includes(file.type) && !hasValidExtension) {
+      setMessage("Erro: O arquivo de áudio deve ser no formato WAV ou MP3.");
+      return false;
+    }
+    if (file.size > 150 * 1024 * 1024) {
+      setMessage("Erro: O arquivo de áudio não pode ter mais de 150MB.");
+      return false;
+    }
+    return true;
+  };
+
+  const processMusicFile = (selectedFile: File) => {
+    setIsProcessingMusic(true);
+    setMusicProgress(0);
+    setMessage("");
+    const interval = setInterval(() => {
+      setMusicProgress(prev => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setFile(selectedFile);
+          setIsProcessingMusic(false);
+          return 100;
+        }
+        return prev + 10;
+      });
+    }, 50);
+  };
+
+  const getMinReleaseDate = () => {
+    const date = new Date();
+    date.setDate(date.getDate() + 5);
+    return date.toISOString().split('T')[0];
+  };
 
   const handleNext = () => {
     setMessage("");
     if (currentStep === 1) {
       if (!title || !artist || !genre || !releaseDate) {
         setMessage("Preencha todos os campos obrigatórios.");
+        return;
+      }
+      
+      if (releaseDate < getMinReleaseDate()) {
+        setMessage("A data de lançamento deve ter um prazo mínimo de 5 a 7 dias.");
         return;
       }
     } else if (currentStep === 2) {
@@ -139,7 +217,7 @@ export default function Upload() {
         await new Promise(resolve => setTimeout(resolve, 2500));
         
         setUploadStep(4); // Step 4: Done
-        setMessage("Sucesso! Música enviada e em processo de distribuição para mais de 45 plataformas.");
+        setMessage("Sucesso! Música enviada e distribuída automaticamente para todas as plataformas parceiras.");
         
         // Reset form after a delay
         setTimeout(() => {
@@ -156,6 +234,7 @@ export default function Upload() {
           setMusicUploadProgress(0);
           setCoverUploadProgress(0);
           setMessage("");
+          setIsConfirmed(false);
           setCurrentStep(1);
         }, 5000);
       } else {
@@ -195,12 +274,12 @@ export default function Upload() {
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Upload de Música</h1>
-        <p className="text-gray-400">Envie sua música para distribuição global em mais de 45 plataformas.</p>
+        <h1 className="text-3xl font-bold text-white mb-2">Distribuição Oficial</h1>
+        <p className="text-gray-400">Distribua sua música globalmente com a tecnologia DistroKid para mais de 45 plataformas.</p>
       </div>
 
       {/* Progress Bar */}
-      <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+      <div className="bg-white/5 border border-white/10 rounded-2xl p-4 md:p-6 mb-8 md:mb-0">
         <div className="flex items-center justify-between relative">
           <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-1 bg-white/10 rounded-full z-0"></div>
           <div 
@@ -227,7 +306,7 @@ export default function Upload() {
         </div>
       </div>
 
-      <div className="bg-white/5 border border-white/10 rounded-3xl p-8 min-h-[400px] flex flex-col">
+      <div className="bg-white/5 border border-white/10 rounded-2xl md:rounded-3xl p-5 md:p-8 min-h-[400px] flex flex-col mt-4 md:mt-8">
         <div className="flex-1">
           <AnimatePresence mode="wait">
             {currentStep === 1 && (
@@ -273,27 +352,56 @@ export default function Upload() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-300">Gênero Primário *</label>
-                    <select 
-                      value={genre}
-                      onChange={(e) => setGenre(e.target.value)}
-                      className="w-full p-4 rounded-xl bg-black/50 border border-white/10 text-white focus:outline-none focus:border-[#1db954] transition-colors appearance-none"
-                    >
-                      <option value="">Selecione um gênero</option>
-                      <option value="afrobeats">Afrobeats</option>
-                      <option value="hiphop">Hip Hop / Rap</option>
-                      <option value="pop">Pop</option>
-                      <option value="rnb">R&B</option>
-                      <option value="electronic">Eletrônica</option>
-                    </select>
+                    <div className="relative">
+                      <select 
+                        value={genre}
+                        onChange={(e) => setGenre(e.target.value)}
+                        className="w-full p-4 rounded-xl bg-black/50 border border-white/10 text-white focus:outline-none focus:border-[#1db954] transition-colors appearance-none cursor-pointer"
+                      >
+                        <option value="" disabled>Selecione um gênero</option>
+                        <option value="Afrobeats">Afrobeats</option>
+                        <option value="Blues">Blues</option>
+                        <option value="Bossa Nova">Bossa Nova</option>
+                        <option value="Country">Country</option>
+                        <option value="Eletrônica / Dance">Eletrônica / Dance</option>
+                        <option value="Folk / Acústico">Folk / Acústico</option>
+                        <option value="Forró">Forró</option>
+                        <option value="Funk">Funk</option>
+                        <option value="Gospel / Cristã">Gospel / Cristã</option>
+                        <option value="Hip Hop / Rap">Hip Hop / Rap</option>
+                        <option value="Indie / Alternativo">Indie / Alternativo</option>
+                        <option value="Jazz">Jazz</option>
+                        <option value="K-Pop">K-Pop</option>
+                        <option value="Lo-Fi">Lo-Fi</option>
+                        <option value="Metal">Metal</option>
+                        <option value="MPB">MPB</option>
+                        <option value="Música Clássica">Música Clássica</option>
+                        <option value="Música Latina">Música Latina</option>
+                        <option value="Pagode / Samba">Pagode / Samba</option>
+                        <option value="Pop">Pop</option>
+                        <option value="R&B / Soul">R&B / Soul</option>
+                        <option value="Reggae">Reggae</option>
+                        <option value="Reggaeton">Reggaeton</option>
+                        <option value="Rock">Rock</option>
+                        <option value="Sertanejo">Sertanejo</option>
+                        <option value="Trap">Trap</option>
+                        <option value="World Music">World Music</option>
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-gray-400">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                      </div>
+                    </div>
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-sm font-medium text-gray-300">Data de Lançamento *</label>
                     <input 
                       type="date" 
                       value={releaseDate}
+                      min={getMinReleaseDate()}
                       onChange={(e) => setReleaseDate(e.target.value)}
                       className="w-full p-4 rounded-xl bg-black/50 border border-white/10 text-white focus:outline-none focus:border-[#1db954] transition-colors [color-scheme:dark]"
                     />
+                    <p className="text-xs text-gray-500 mt-1">O lançamento deve ser agendado com pelo menos 5 a 7 dias de antecedência.</p>
                   </div>
                 </div>
               </motion.div>
@@ -311,39 +419,46 @@ export default function Upload() {
                 <h2 className="text-2xl font-bold text-white mb-6">Capa do Álbum</h2>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-300">Arte da Capa (3000x3000px) *</label>
-                  <div className="relative group cursor-pointer mt-4">
+                  <div 
+                    className="relative group cursor-pointer mt-4"
+                    onDragOver={(e) => { e.preventDefault(); setIsDraggingCover(true); }}
+                    onDragLeave={() => setIsDraggingCover(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingCover(false);
+                      const droppedFile = e.dataTransfer.files?.[0];
+                      if (droppedFile && validateCover(droppedFile)) {
+                        processCoverFile(droppedFile);
+                      }
+                    }}
+                  >
                     <input 
                       id="cover-file"
                       type="file" 
                       onChange={(e) => {
                         const selectedFile = e.target.files?.[0];
-                        if (selectedFile) {
-                          setIsProcessingCover(true);
-                          setCoverProgress(0);
-                          const interval = setInterval(() => {
-                            setCoverProgress(prev => {
-                              if (prev >= 100) {
-                                clearInterval(interval);
-                                setCover(selectedFile);
-                                setIsProcessingCover(false);
-                                return 100;
-                              }
-                              return prev + 15;
-                            });
-                          }, 50);
+                        if (selectedFile && validateCover(selectedFile)) {
+                          processCoverFile(selectedFile);
+                        } else if (selectedFile) {
+                          e.target.value = '';
                         }
                       }}
-                      accept="image/*"
+                      accept="image/jpeg,image/png"
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                       disabled={isProcessingCover}
                     />
-                    <div className={`w-full p-12 rounded-3xl border-2 border-dashed flex flex-col items-center justify-center gap-6 transition-colors ${cover || isProcessingCover ? 'border-[#1db954] bg-[#1db954]/5' : 'border-white/20 bg-black/50 group-hover:border-[#1db954]/50 group-hover:bg-white/5'}`}>
-                      {isProcessingCover ? (
+                    <div className={`w-full p-12 rounded-3xl border-2 border-dashed flex flex-col items-center justify-center gap-6 transition-all duration-300 ${isDraggingCover ? 'border-[#1db954] bg-[#1db954]/20 scale-[1.02]' : cover || isProcessingCover ? 'border-[#1db954] bg-[#1db954]/5' : 'border-white/20 bg-black/50 group-hover:border-[#1db954]/50 group-hover:bg-white/5'}`}>
+                      {isDraggingCover ? (
+                        <div className="text-center text-[#1db954]">
+                          <UploadIcon size={48} className="mx-auto mb-4" />
+                          <p className="text-xl font-bold">Solte a capa aqui</p>
+                        </div>
+                      ) : isProcessingCover ? (
                         <div className="w-full max-w-xs text-center space-y-4">
                           <Loader2 size={40} className="animate-spin text-[#1db954] mx-auto" />
                           <p className="text-white font-medium">Processando imagem...</p>
-                          <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                            <div className="bg-[#1db954] h-2 rounded-full transition-all duration-200" style={{ width: `${coverProgress}%` }}></div>
+                          <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden border border-white/10">
+                            <div className="bg-[#1db954] h-full rounded-full transition-all duration-200" style={{ width: `${coverProgress}%` }}></div>
                           </div>
                           <p className="text-xs text-[#1db954] font-bold">{coverProgress}%</p>
                         </div>
@@ -386,44 +501,46 @@ export default function Upload() {
                 <h2 className="text-2xl font-bold text-white mb-6">Arquivo de Áudio</h2>
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-300">Música (WAV ou MP3) *</label>
-                  <div className="relative group cursor-pointer mt-4">
+                  <div 
+                    className="relative group cursor-pointer mt-4"
+                    onDragOver={(e) => { e.preventDefault(); setIsDraggingMusic(true); }}
+                    onDragLeave={() => setIsDraggingMusic(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingMusic(false);
+                      const droppedFile = e.dataTransfer.files?.[0];
+                      if (droppedFile && validateMusic(droppedFile)) {
+                        processMusicFile(droppedFile);
+                      }
+                    }}
+                  >
                     <input 
                       id="music-file"
                       type="file" 
                       onChange={(e) => {
                         const selectedFile = e.target.files?.[0];
-                        if (selectedFile && !selectedFile.name.toLowerCase().endsWith('.wav') && !selectedFile.name.toLowerCase().endsWith('.mp3') && selectedFile.type !== 'audio/wav' && selectedFile.type !== 'audio/mpeg') {
-                          setMessage("Erro: O arquivo de áudio deve ser no formato WAV ou MP3.");
-                          setFile(null);
-                          e.target.value = '';
+                        if (selectedFile && validateMusic(selectedFile)) {
+                          processMusicFile(selectedFile);
                         } else if (selectedFile) {
-                          setIsProcessingMusic(true);
-                          setMusicProgress(0);
-                          setMessage("");
-                          const interval = setInterval(() => {
-                            setMusicProgress(prev => {
-                              if (prev >= 100) {
-                                clearInterval(interval);
-                                setFile(selectedFile);
-                                setIsProcessingMusic(false);
-                                return 100;
-                              }
-                              return prev + 10;
-                            });
-                          }, 50);
+                          e.target.value = '';
                         }
                       }}
-                      accept=".wav,.mp3,audio/wav,audio/mpeg"
+                      accept=".wav,.mp3,audio/wav,audio/mpeg,audio/mp3,audio/x-wav"
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                       disabled={isProcessingMusic}
                     />
-                    <div className={`w-full p-12 rounded-3xl border-2 border-dashed flex flex-col items-center justify-center gap-6 transition-colors ${file || isProcessingMusic ? 'border-[#1db954] bg-[#1db954]/5' : 'border-white/20 bg-black/50 group-hover:border-[#1db954]/50 group-hover:bg-white/5'}`}>
-                      {isProcessingMusic ? (
+                    <div className={`w-full p-12 rounded-3xl border-2 border-dashed flex flex-col items-center justify-center gap-6 transition-all duration-300 ${isDraggingMusic ? 'border-[#1db954] bg-[#1db954]/20 scale-[1.02]' : file || isProcessingMusic ? 'border-[#1db954] bg-[#1db954]/5' : 'border-white/20 bg-black/50 group-hover:border-[#1db954]/50 group-hover:bg-white/5'}`}>
+                      {isDraggingMusic ? (
+                        <div className="text-center text-[#1db954]">
+                          <UploadIcon size={48} className="mx-auto mb-4" />
+                          <p className="text-xl font-bold">Solte a música aqui</p>
+                        </div>
+                      ) : isProcessingMusic ? (
                         <div className="w-full max-w-xs text-center space-y-4">
                           <Loader2 size={40} className="animate-spin text-[#1db954] mx-auto" />
                           <p className="text-white font-medium">Analisando áudio...</p>
-                          <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                            <div className="bg-[#1db954] h-2 rounded-full transition-all duration-200" style={{ width: `${musicProgress}%` }}></div>
+                          <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden border border-white/10">
+                            <div className="bg-[#1db954] h-full rounded-full transition-all duration-200" style={{ width: `${musicProgress}%` }}></div>
                           </div>
                           <p className="text-xs text-[#1db954] font-bold">{musicProgress}%</p>
                         </div>
@@ -480,7 +597,7 @@ export default function Upload() {
                           <h3 className="text-3xl font-bold text-white">{title}</h3>
                           <p className="text-xl text-gray-400">{artist}</p>
                         </div>
-                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-white/10">
                           <div>
                             <p className="text-xs text-gray-500 uppercase tracking-wider">Gênero</p>
                             <p className="text-white font-medium capitalize">{genre}</p>
@@ -490,19 +607,54 @@ export default function Upload() {
                             <p className="text-white font-medium">{new Date(releaseDate).toLocaleDateString('pt-BR')}</p>
                           </div>
                           {album && (
-                            <div className="col-span-2">
+                            <div className="col-span-2 md:col-span-3">
                               <p className="text-xs text-gray-500 uppercase tracking-wider">Álbum</p>
                               <p className="text-white font-medium">{album}</p>
+                            </div>
+                          )}
+                          {file && (
+                            <div className="col-span-2 md:col-span-3 pt-4 border-t border-white/10">
+                              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Arquivo de Áudio</p>
+                              <div className="flex items-center gap-3 bg-white/5 p-3 rounded-lg border border-white/10">
+                                <Music size={20} className="text-[#1db954]" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-white font-medium text-sm truncate">{file.name}</p>
+                                  <p className="text-xs text-gray-400">{(file.size / (1024 * 1024)).toFixed(2)} MB • {file.type || 'Áudio'}</p>
+                                </div>
+                              </div>
                             </div>
                           )}
                         </div>
                       </div>
                     </div>
 
+                    <div className="bg-black/40 rounded-2xl p-6 border border-white/5">
+                      <label className="flex items-start gap-3 cursor-pointer group">
+                        <div className="relative flex items-center justify-center mt-1">
+                          <input 
+                            type="checkbox" 
+                            checked={isConfirmed}
+                            onChange={(e) => setIsConfirmed(e.target.checked)}
+                            className="peer sr-only"
+                          />
+                          <div className="w-5 h-5 border-2 border-gray-500 rounded bg-transparent peer-checked:bg-[#1db954] peer-checked:border-[#1db954] transition-colors"></div>
+                          <CheckCircle size={14} className="absolute text-black opacity-0 peer-checked:opacity-100 transition-opacity" />
+                        </div>
+                        <div className="flex-1">
+                          <p className="text-white font-medium">Confirmo que as informações estão corretas</p>
+                          <p className="text-sm text-gray-400 mt-1">
+                            Declaro que possuo todos os direitos autorais sobre esta obra e autorizo a SLYDE MUSIK a distribuí-la nas plataformas selecionadas.
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
                     <div className="space-y-4">
-                      <h3 className="text-lg font-bold text-white">Plataformas de Destino</h3>
+                      <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                        Plataformas de Destino <span className="text-xs font-normal text-gray-400 bg-white/10 px-2 py-1 rounded-full">Powered by DistroKid</span>
+                      </h3>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {['Spotify', 'Apple Music', 'YouTube Music', 'TikTok', 'Deezer', 'Amazon Music', 'Tidal'].map(platform => (
+                        {['Spotify', 'Apple Music', 'YouTube Music', 'TikTok', 'Deezer', 'Amazon Music', 'Tidal', 'SoundCloud', 'Pandora', 'Napster', 'Claro Música', 'Anghami', 'iHeartRadio'].map(platform => (
                           <div key={platform} className="flex items-center gap-2 p-3 rounded-lg border border-[#1db954]/30 bg-[#1db954]/5">
                             <CheckCircle size={16} className="text-[#1db954]" />
                             <span className="text-sm font-medium text-white">{platform}</span>
@@ -592,8 +744,8 @@ export default function Upload() {
                           {uploadStep > 3 ? <CheckCircle size={24} /> : uploadStep === 3 ? <Loader2 size={24} className="animate-spin" /> : <Globe size={24} />}
                         </div>
                         <div>
-                          <p className={`font-bold text-lg ${uploadStep >= 3 ? 'text-white' : 'text-gray-400'}`}>3. API da Distribuidora</p>
-                          <p className="text-sm text-gray-500">Conectando com parceiros agregadores.</p>
+                          <p className={`font-bold text-lg ${uploadStep >= 3 ? 'text-white' : 'text-gray-400'}`}>3. API da DistroKid</p>
+                          <p className="text-sm text-gray-500">Conectando com a agregadora oficial (DistroKid).</p>
                         </div>
                       </div>
 
@@ -650,7 +802,12 @@ export default function Upload() {
             ) : (
               <button
                 onClick={handleSubmit}
-                className="flex items-center gap-2 px-8 py-3 bg-[#1db954] text-black hover:bg-[#1ed760] rounded-full font-bold transition-transform hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(29,185,84,0.4)]"
+                disabled={!isConfirmed}
+                className={`flex items-center gap-2 px-8 py-3 rounded-full font-bold transition-all ${
+                  isConfirmed 
+                    ? 'bg-[#1db954] text-black hover:bg-[#1ed760] hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(29,185,84,0.4)]' 
+                    : 'bg-white/10 text-gray-500 cursor-not-allowed'
+                }`}
               >
                 <UploadIcon size={20} />
                 Distribuir Música

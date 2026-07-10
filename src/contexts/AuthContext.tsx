@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
+import { User, onAuthStateChanged, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 
 interface UserProfile {
   email: string;
@@ -9,7 +9,14 @@ interface UserProfile {
   displayName?: string;
   photoURL?: string;
   hasPaid?: boolean;
+  status?: 'pending' | 'approved' | 'rejected' | 'em_revisao';
+  paymentSubmitted?: boolean;
+  subscriptionExpiresAt?: any;
   createdAt: any;
+  notifications?: {
+    emailDistributed: boolean;
+    emailRejected: boolean;
+  };
 }
 
 interface AuthContextType {
@@ -32,41 +39,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    // Handle redirect result globally
+    getRedirectResult(auth).then((result) => {
+      if (result) {
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        if (credential?.accessToken) {
+          import('../utils/googleAuth').then(m => m.setGoogleAccessToken(credential.accessToken));
+        }
+      }
+    }).catch(console.error);
+
+    let unsubscribeProfile: (() => void) | undefined;
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       
       if (user) {
         // Fetch or create user profile
         try {
           const userDocRef = doc(db, 'users', user.uid);
-          const userDoc = await getDoc(userDocRef);
           
-          if (userDoc.exists()) {
-            setUserProfile(userDoc.data() as UserProfile);
-          } else {
-            // Create new profile
-            const newProfile: UserProfile = {
-              email: user.email || '',
-              role: 'artist',
-              displayName: user.displayName || '',
-              photoURL: user.photoURL || '',
-              hasPaid: false,
-              createdAt: serverTimestamp(),
-            };
-            await setDoc(userDocRef, newProfile);
-            setUserProfile(newProfile);
-          }
+          unsubscribeProfile = onSnapshot(userDocRef, async (userDoc) => {
+            if (userDoc.exists()) {
+              setUserProfile(userDoc.data() as UserProfile);
+            } else {
+              // Create new profile
+              const newProfile: UserProfile = {
+                email: user.email || '',
+                role: 'artist',
+                displayName: user.displayName || '',
+                photoURL: user.photoURL || '',
+                hasPaid: false,
+                status: 'pending',
+                createdAt: serverTimestamp(),
+              };
+              await setDoc(userDocRef, newProfile);
+              setUserProfile(newProfile);
+            }
+            setLoading(false);
+          });
         } catch (error) {
           console.error("Error fetching/creating user profile:", error);
+          setLoading(false);
         }
       } else {
         setUserProfile(null);
+        if (unsubscribeProfile) {
+          unsubscribeProfile();
+        }
+        setLoading(false);
       }
-      
-      setLoading(false);
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+      }
+    };
   }, []);
 
   return (

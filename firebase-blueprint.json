@@ -10,6 +10,17 @@
         "photoURL": { "type": "string" },
         "role": { "type": "string", "enum": ["artist", "admin"] },
         "hasPaid": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "paymentSubmitted": { "type": "boolean" },
+        "subscriptionExpiresAt": { "type": "string", "format": "date-time" },
+        "location": { "type": "string" },
+        "genre": { "type": "string" },
+        "bio": { "type": "string" },
+        "instagram": { "type": "string" },
+        "twitter": { "type": "string" },
+        "youtube": { "type": "string" },
+        "website": { "type": "string" },
+        "notifications": { "type": "object" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["email", "role", "createdAt"]

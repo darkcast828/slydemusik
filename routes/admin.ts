@@ -1,5 +1,5 @@
 import express from "express";
-import db from "../database.js";
+import db from "../database.ts";
 
 const router = express.Router();
 
@@ -9,7 +9,7 @@ const checkAdminAuth = (req: express.Request, res: express.Response, next: expre
   const password = req.headers["x-admin-password"];
   
   // Credenciais hardcoded para o painel de administração
-  if (email !== "admin@slydemusik.com" || password !== "slyde-admin-2026") {
+  if (email !== "admin@slydemusik.com" || password !== "Naftal008") {
     return res.status(403).json({ error: "Acesso negado. Credenciais incorretas." });
   }
   next();

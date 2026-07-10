@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import db from "../database.js";
+import db from "../database.ts";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -49,8 +49,8 @@ router.post(
 
     try {
       const insertSong = db.prepare(`
-        INSERT INTO songs (artist_id, artist_name, title, album, genre, cover, file, release_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO songs (artist_id, artist_name, title, album, genre, cover, file, release_date, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'distributed')
       `);
       const result = insertSong.run(artist_id || "unknown_user", artist, title, album || null, genre, cover, music, release_date);
       const songId = result.lastInsertRowid;
@@ -58,14 +58,14 @@ router.post(
       // Create distribution records for all platforms
       const platforms = db.prepare(`SELECT id FROM platforms`).all() as { id: number }[];
       const insertDist = db.prepare(`
-        INSERT INTO distributions (song_id, platform_id, status, scheduled_for)
-        VALUES (?, ?, 'pending', datetime('now', ?))
+        INSERT INTO distributions (song_id, platform_id, status, scheduled_for, confirmed_at)
+        VALUES (?, ?, 'confirmed', datetime('now', ?), CURRENT_TIMESTAMP)
       `);
       
       const insertManyDist = db.transaction((plats: { id: number }[]) => {
         for (const p of plats) {
-          // Random delay between 12 hours and 72 hours (3 dias)
-          const hoursDelay = Math.floor(Math.random() * (72 - 12 + 1) + 12);
+          // No delay for automatic distribution
+          const hoursDelay = 0;
           insertDist.run(songId, p.id, `+${hoursDelay} hours`);
         }
       });
